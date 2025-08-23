@@ -1,0 +1,25 @@
+{
+  "name": "pickleball-scorer-app",
+  "version": "1.0.0",
+  "description": "Pickleball Score Remote Control App",
+  "main": "index.js",
+  "scripts": {
+    "ionic:build": "cp -r www/* www/ || true",
+    "build": "echo 'Build completed - files ready in www/'",
+    "start": "echo 'Development server not needed for static HTML'"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "pickleball",
+    "capacitor",
+    "mobile-app"
+  ],
+  "author": "PickleballTV",
+  "license": "MIT"
+}

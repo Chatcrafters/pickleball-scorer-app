@@ -1,0 +1,7 @@
+{
+  "name": "Pickleball Scorer",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "custom"
+}
