@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -63,7 +63,6 @@
             50% { opacity: 0.5; }
         }
 
-        /* ============= 🆕 DEEP LINK CONNECTION SCREEN ============= */
         .connection-screen {
             position: fixed;
             top: 0;
@@ -208,7 +207,6 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* ============= MAIN APP INTERFACE ============= */
         .main-app {
             flex: 1;
             display: flex;
@@ -371,7 +369,6 @@
         .instagram { background: linear-gradient(135deg, #f58529 0%, #dd2a7b 50%, #8134af 100%); }
         .copy { background: #666; }
 
-        /* Success feedback */
         .success-toast {
             position: fixed;
             top: 50%;
@@ -396,7 +393,6 @@
             50% { opacity: 1; }
         }
 
-        /* ============= SESSION INFO DISPLAY ============= */
         .session-info {
             background: rgba(0, 255, 136, 0.1);
             border: 1px solid #00ff88;
@@ -420,26 +416,23 @@
     </style>
 </head>
 <body>
-    <!-- ============= 🆕 CONNECTION SCREEN ============= -->
     <div class="connection-screen" id="connectionScreen">
         <div class="connection-logo">🎾</div>
         <div class="connection-title">Pickleball Score Remote</div>
         <div class="connection-subtitle">Connect to a live match</div>
 
-        <!-- Auto-connecting from Deep Link -->
         <div class="auto-connecting" id="autoConnecting" style="display: none;">
             <div class="spinner"></div>
             <div>Connecting to session...</div>
             <div id="autoSessionId" style="font-family: monospace; margin-top: 10px;"></div>
         </div>
 
-        <!-- Manual Session Input -->
         <div class="session-input-container" id="manualInput">
             <div class="session-input-title">Enter Session Code</div>
-            <input 
-                type="text" 
-                class="session-input" 
-                id="sessionIdInput" 
+            <input
+                type="text"
+                class="session-input"
+                id="sessionIdInput"
                 placeholder="ABC123"
                 maxlength="6"
                 autocomplete="off"
@@ -450,11 +443,9 @@
             </button>
         </div>
 
-        <!-- Connection Status -->
         <div class="connection-status" id="connectionStatus" style="display: none;"></div>
     </div>
 
-    <!-- ============= MAIN APP INTERFACE ============= -->
     <div class="main-app hidden" id="mainApp">
         <div class="header">
             <h1>🎾 SCORE REMOTE</h1>
@@ -470,7 +461,6 @@
             </div>
         </div>
 
-        <!-- Session Info -->
         <div class="session-info" id="sessionInfo" style="display: none;">
             <div>Session: <span class="session-id" id="currentSessionId"></span></div>
             <div class="connection-count" id="connectionCount"></div>
@@ -536,14 +526,12 @@
     <div class="success-toast" id="successToast"></div>
 
     <script>
-        // ============= 🆕 DEEP LINK & SESSION SYSTEM =============
-        
         let ws = null;
         let currentSessionId = null;
         let isConnected = false;
         let connectionAttempts = 0;
         const maxRetries = 3;
-        
+
         let currentState = {
             scoreA: 0,
             scoreB: 0,
@@ -554,31 +542,25 @@
             streamLink: ''
         };
 
-        // ============= DEEP LINK DETECTION & PARSING =============
-        
         function detectDeepLink() {
             console.log('🔗 Checking for Deep Link...');
-            
-            // Method 1: Check URL parameters (Universal Links)
+
             const urlParams = new URLSearchParams(window.location.search);
             const sessionFromUrl = urlParams.get('session') || urlParams.get('s');
-            
-            // Method 2: Check hash for Deep Link data
+
             const hash = window.location.hash;
             const sessionFromHash = hash.match(/session[=/]([A-Z0-9]{6})/i);
-            
-            // Method 3: Check if launched via custom URL scheme (stored in sessionStorage)
+
             const sessionFromStorage = sessionStorage.getItem('deeplink_session');
-            
-            // Method 4: Parse full URL path (e.g., /join/ABC123)
+
             const pathMatch = window.location.pathname.match(/\/join\/([A-Z0-9]{6})/i);
             const sessionFromPath = pathMatch ? pathMatch[1] : null;
-            
-            const detectedSession = sessionFromUrl || 
-                                   (sessionFromHash && sessionFromHash[1]) || 
-                                   sessionFromStorage || 
+
+            const detectedSession = sessionFromUrl ||
+                                   (sessionFromHash && sessionFromHash[1]) ||
+                                   sessionFromStorage ||
                                    sessionFromPath;
-            
+
             console.log('🔍 Deep Link Detection:', {
                 url: sessionFromUrl,
                 hash: sessionFromHash && sessionFromHash[1],
@@ -586,86 +568,77 @@
                 path: sessionFromPath,
                 detected: detectedSession
             });
-            
+
             if (detectedSession) {
                 console.log('✅ Deep Link detected:', detectedSession);
                 return detectedSession.toUpperCase();
             }
-            
+
             return null;
         }
-        
+
         function handleDeepLink(sessionId) {
             console.log('🚀 Handling Deep Link for session:', sessionId);
-            
+
             currentSessionId = sessionId;
-            
-            // Show auto-connecting UI
+
             document.getElementById('autoConnecting').style.display = 'block';
             document.getElementById('manualInput').style.display = 'none';
             document.getElementById('autoSessionId').textContent = `Session: ${sessionId}`;
-            
-            // Clear any stored session data
+
             sessionStorage.removeItem('deeplink_session');
-            
-            // Auto-connect with delay for better UX
+
             setTimeout(() => {
                 connectToSessionDirect(sessionId);
             }, 1500);
         }
-        
-        // ============= SESSION CONNECTION =============
-        
+
         async function connectToSession() {
             const sessionInput = document.getElementById('sessionIdInput');
             const sessionId = sessionInput.value.trim().toUpperCase();
-            
+
             if (!sessionId || sessionId.length !== 6) {
                 showConnectionStatus('Please enter a 6-character session code', 'error');
                 return;
             }
-            
+
             connectToSessionDirect(sessionId);
         }
-        
+
         async function connectToSessionDirect(sessionId) {
             console.log('🔌 Connecting to session:', sessionId);
-            
+
             currentSessionId = sessionId;
             connectionAttempts++;
-            
+
             showConnectionStatus('Connecting...', 'connecting');
             document.getElementById('connectButton').disabled = true;
-            
+
             try {
-                // 1. Validate session exists
-                const response = await fetch(`/api/session/${sessionId}/join`, {
+                const response = await fetch(`http://91.99.146.195:8000/api/session/${sessionId}/join`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
-                
+
                 const sessionInfo = await response.json();
-                
+
                 if (!sessionInfo.success) {
                     throw new Error(sessionInfo.error || 'Session not found');
                 }
-                
+
                 console.log('✅ Session validated:', sessionInfo);
-                
-                // 2. Connect WebSocket to session
+
                 await connectSessionWebSocket(sessionId);
-                
-                // 3. Update UI with session info
+
                 updateFromSessionInfo(sessionInfo);
-                
-                // 4. Switch to main app
+
                 showMainApp();
-                
+
                 showConnectionStatus('Connected successfully!', 'success');
-                
+
             } catch (error) {
                 console.error('❌ Connection failed:', error);
-                
+
                 if (connectionAttempts < maxRetries) {
                     showConnectionStatus(`Connection failed. Retrying... (${connectionAttempts}/${maxRetries})`, 'error');
                     setTimeout(() => connectToSessionDirect(sessionId), 2000);
@@ -675,33 +648,32 @@
                 }
             }
         }
-        
+
         async function connectSessionWebSocket(sessionId) {
             return new Promise((resolve, reject) => {
-                const wsUrl = `ws://${window.location.hostname}:8000/ws/session/${sessionId}?role=controller`;
+                const wsUrl = `ws://91.99.146.195:8000/ws/session/${sessionId}?role=controller`;
                 console.log('🔌 Connecting WebSocket:', wsUrl);
-                
+
                 ws = new WebSocket(wsUrl);
-                
+
                 ws.onopen = () => {
                     console.log('✅ WebSocket connected to session:', sessionId);
                     isConnected = true;
                     updateConnectionStatus();
                     resolve();
                 };
-                
+
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     console.log('📨 Session message:', data);
                     handleSessionMessage(data);
                 };
-                
+
                 ws.onclose = () => {
                     console.log('❌ WebSocket disconnected');
                     isConnected = false;
                     updateConnectionStatus();
-                    
-                    // Auto-reconnect after 3 seconds
+
                     setTimeout(() => {
                         if (currentSessionId) {
                             console.log('🔄 Auto-reconnecting...');
@@ -709,15 +681,14 @@
                         }
                     }, 3000);
                 };
-                
+
                 ws.onerror = (error) => {
                     console.error('❌ WebSocket error:', error);
                     isConnected = false;
                     updateConnectionStatus();
                     reject(error);
                 };
-                
-                // Timeout after 10 seconds
+
                 setTimeout(() => {
                     if (ws.readyState !== WebSocket.OPEN) {
                         reject(new Error('WebSocket connection timeout'));
@@ -725,7 +696,7 @@
                 }, 10000);
             });
         }
-        
+
         function handleSessionMessage(data) {
             switch (data.type) {
                 case 'session_joined':
@@ -734,85 +705,83 @@
                     updateDisplay(data.data);
                     updateSessionInfo(data.session_id);
                     break;
-                    
+
                 case 'score_update':
                     currentState = data.data;
                     updateDisplay(data.data);
                     break;
-                    
+
                 case 'settings_update':
                     currentState = data.data;
                     updateDisplay(data.data);
                     break;
-                    
+
                 case 'participant_joined':
                     updateConnectionCount(data.controller_count, data.host_connected);
                     break;
-                    
+
                 case 'participant_left':
                     updateConnectionCount(data.controller_count, data.host_connected);
                     break;
-                    
+
                 case 'error':
                     console.error('❌ Session error:', data.error);
                     showConnectionStatus(data.error, 'error');
                     break;
-                    
+
                 default:
                     console.log('📨 Unknown message type:', data.type);
             }
         }
-        
+
         function updateFromSessionInfo(sessionInfo) {
             if (sessionInfo.game_state) {
                 currentState = sessionInfo.game_state;
                 updateDisplay(sessionInfo.game_state);
             }
-            
+
             updateConnectionCount(sessionInfo.controller_count, sessionInfo.host_connected);
         }
-        
-        // ============= UI UPDATES =============
-        
+
         function showConnectionStatus(message, type) {
             const statusEl = document.getElementById('connectionStatus');
             statusEl.textContent = message;
             statusEl.className = `connection-status ${type}`;
             statusEl.style.display = 'block';
-            
+
             if (type === 'success') {
                 setTimeout(() => {
                     statusEl.style.display = 'none';
                 }, 3000);
             }
         }
-        
+
         function resetConnectionScreen() {
             document.getElementById('autoConnecting').style.display = 'none';
             document.getElementById('manualInput').style.display = 'block';
             document.getElementById('connectButton').disabled = false;
             connectionAttempts = 0;
         }
-        
+
         function showMainApp() {
             document.getElementById('connectionScreen').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
         }
-        
+
         function updateSessionInfo(sessionId) {
             document.getElementById('currentSessionId').textContent = sessionId;
             document.getElementById('sessionInfo').style.display = 'block';
         }
-        
+
         function updateConnectionCount(controllers, hostConnected) {
             const countEl = document.getElementById('connectionCount');
             countEl.textContent = `👥 ${controllers} controller(s) | Host: ${hostConnected ? '✅' : '❌'}`;
         }
-        
+
         function updateConnectionStatus() {
             const statusDot = document.getElementById('statusDot');
             const connectionText = document.getElementById('connectionText');
-            
+
             if (isConnected) {
                 statusDot.classList.remove('disconnected');
                 connectionText.textContent = 'Session verbunden';
@@ -821,7 +790,7 @@
                 connectionText.textContent = 'Verbindung verloren';
             }
         }
-        
+
         function updateDisplay(data) {
             document.getElementById('scoreA').textContent = data.scoreA;
             document.getElementById('scoreB').textContent = data.scoreB;
@@ -829,21 +798,17 @@
             document.getElementById('teamBName').textContent = data.teamB;
             document.getElementById('btnTeamA').textContent = data.teamA;
             document.getElementById('btnTeamB').textContent = data.teamB;
-            
-            // Update serving indicator
+
             document.getElementById('teamAName').classList.toggle('serving', data.server === 'A');
             document.getElementById('teamBName').classList.toggle('serving', data.server === 'B');
-            
-            // Update stream status if available
+
             if (data.streamLink) {
                 currentState.streamLink = data.streamLink;
                 currentState.platform = data.streamPlatform || 'YouTube';
                 document.getElementById('streamStatus').textContent = `📺 ${currentState.platform} Live`;
             }
         }
-        
-        // ============= SCORE CONTROL FUNCTIONS =============
-        
+
         function addPoint(team) {
             vibrate();
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -855,7 +820,7 @@
             }
             showSuccess('+1');
         }
-        
+
         function undo() {
             vibrate();
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -864,7 +829,7 @@
                 }));
             }
         }
-        
+
         function switchServe() {
             vibrate();
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -875,7 +840,7 @@
                 }));
             }
         }
-        
+
         function newGame() {
             vibrate();
             if (confirm('Neues Spiel starten?')) {
@@ -886,40 +851,37 @@
                 }
             }
         }
-        
-        // ============= SHARING FUNCTIONS =============
-        
+
         function shareWhatsApp() {
             const sessionLink = generateSessionLink();
             const text = `🎾 LIVE Pickleball!\n${currentState.teamA} vs ${currentState.teamB}\n\nJoin the action:\n${sessionLink}`;
             const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
             window.open(whatsappUrl, '_blank');
         }
-        
+
         function shareInstagram() {
             const sessionLink = generateSessionLink();
             copyToClipboard(sessionLink);
             alert('Link kopiert! Füge ihn in deine Instagram Story ein.');
         }
-        
+
         function copyLink() {
             const sessionLink = generateSessionLink();
             copyToClipboard(sessionLink);
             showSuccess('Link kopiert!');
         }
-        
+
         function generateSessionLink() {
             if (currentSessionId) {
                 return `https://pickleballtv.app/join/${currentSessionId}`;
             }
             return currentState.streamLink || window.location.href;
         }
-        
+
         function copyToClipboard(text) {
             if (navigator.clipboard) {
                 navigator.clipboard.writeText(text);
             } else {
-                // Fallback for older browsers
                 const textArea = document.createElement('textarea');
                 textArea.value = text;
                 document.body.appendChild(textArea);
@@ -928,15 +890,13 @@
                 document.body.removeChild(textArea);
             }
         }
-        
-        // ============= UTILITY FUNCTIONS =============
-        
+
         function vibrate() {
             if (navigator.vibrate) {
                 navigator.vibrate(50);
             }
         }
-        
+
         function showSuccess(message) {
             const toast = document.getElementById('successToast');
             toast.textContent = message;
@@ -945,15 +905,12 @@
                 toast.classList.remove('show');
             }, 1000);
         }
-        
-        // ============= INITIALIZATION =============
-        
+
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🎾 Pickleball Score Remote loaded');
-            
-            // Check for Deep Link on load
+
             const deepLinkSession = detectDeepLink();
-            
+
             if (deepLinkSession) {
                 console.log('🔗 Deep Link detected on load:', deepLinkSession);
                 handleDeepLink(deepLinkSession);
@@ -961,54 +918,46 @@
                 console.log('📱 No Deep Link detected, showing manual input');
                 resetConnectionScreen();
             }
-            
-            // Handle session input formatting
+
             const sessionInput = document.getElementById('sessionIdInput');
             sessionInput.addEventListener('input', (e) => {
                 e.target.value = e.target.value.toUpperCase();
             });
-            
+
             sessionInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     connectToSession();
                 }
             });
         });
-        
-        // ============= CAPACITOR DEEP LINK HANDLER (for native apps) =============
-        
-        // Listen for Capacitor App URL events (when app is launched via Deep Link)
+
         document.addEventListener('capacitor:appUrlOpen', (event) => {
             console.log('📱 Capacitor Deep Link received:', event.detail.url);
-            
+
             const url = event.detail.url;
             const sessionMatch = url.match(/pickleballtv:\/\/join\/([A-Z0-9]{6})/i);
-            
+
             if (sessionMatch) {
                 const sessionId = sessionMatch[1].toUpperCase();
                 console.log('✅ Capacitor Deep Link session:', sessionId);
                 handleDeepLink(sessionId);
             }
         });
-        
-        // ============= ADVANCED DEEP LINK DETECTION =============
-        
-        // Listen for focus events (when returning from another app)
+
         window.addEventListener('focus', () => {
             console.log('🔍 Window focused, checking for new Deep Link data...');
-            
+
             const newSession = detectDeepLink();
             if (newSession && newSession !== currentSessionId) {
                 console.log('🔗 New Deep Link detected:', newSession);
                 handleDeepLink(newSession);
             }
         });
-        
-        // Handle page visibility changes
+
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 console.log('👁️ Page visible, checking Deep Link...');
-                
+
                 const newSession = detectDeepLink();
                 if (newSession && newSession !== currentSessionId) {
                     console.log('🔗 Deep Link detected on visibility:', newSession);
@@ -1016,7 +965,7 @@
                 }
             }
         });
-        
+
         console.log('🚀 Deep Link Score Control System ready!');
     </script>
 </body>
