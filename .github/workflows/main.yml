@@ -23,7 +23,10 @@ jobs:
         java-version: '17'
         
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v2
+      uses: android-actions/setup-android@v3
+      
+    - name: Accept Android SDK licenses
+      run: yes | sdkmanager --licenses
       
     - name: Install dependencies
       run: npm install
@@ -35,7 +38,7 @@ jobs:
         ./gradlew assembleDebug
         
     - name: Upload APK
-  uses: actions/upload-artifact@v4
-  with:
-    name: app-debug.apk
-    path: android/app/build/outputs/apk/debug/app-debug.apk
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: android/app/build/outputs/apk/debug/app-debug.apk
