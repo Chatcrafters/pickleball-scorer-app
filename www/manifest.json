@@ -1,0 +1,15 @@
+{
+  "name": "Pickleball Remote Scorer",
+  "short_name": "Pickleball Remote",
+  "start_url": "/remote-scorer.html",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#00ff00",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

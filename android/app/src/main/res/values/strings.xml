@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pickleball Remote</string>
+    <string name="title_activity_main">Pickleball Remote</string>
+    <string name="package_name">com.pickleballtv.remote</string>
+    <string name="custom_url_scheme">com.pickleballtv.remote</string>
+</resources>
