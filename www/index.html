@@ -301,6 +301,7 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 10px;
+            margin-bottom: 20px;
         }
 
         .control-button {
@@ -335,6 +336,84 @@
             color: #ff4444;
         }
 
+        /* SET MANAGEMENT STYLES */
+        .set-management {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .set-header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .set-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #00ff00;
+            margin-bottom: 5px;
+        }
+
+        .set-status {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .set-controls {
+            display: grid;
+            gap: 10px;
+        }
+
+        .set-button {
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .set-button:active {
+            transform: scale(0.95);
+        }
+
+        .set-button.end-set {
+            background: linear-gradient(135deg, #ff8800, #ff6600);
+            color: white;
+        }
+
+        .set-button.new-set {
+            background: linear-gradient(135deg, #0088ff, #0066cc);
+            color: white;
+        }
+
+        .set-button.end-match {
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            color: white;
+        }
+
+        .set-button.continue {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .set-finished-controls {
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .set-finished-controls.show {
+            display: grid;
+        }
+
         /* Responsive Design */
         @media (max-width: 480px) {
             .container {
@@ -351,6 +430,10 @@
             
             .score {
                 font-size: 40px;
+            }
+
+            .set-finished-controls {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -430,9 +513,36 @@
                 <button id="btnUndo" class="control-button undo">
                     Undo<br>Last
                 </button>
-                <button id="btnNewGame" class="control-button reset">
-                    New<br>Game
+                <button id="btnReset" class="control-button reset">
+                    Reset<br>Score
                 </button>
+            </div>
+
+            <!-- NEW: SET MANAGEMENT SECTION -->
+            <div class="set-management">
+                <div class="set-header">
+                    <div class="set-title">Set Management</div>
+                    <div id="setStatus" class="set-status">Flexible scoring - end set at any score</div>
+                </div>
+                
+                <div class="set-controls">
+                    <button id="endSetBtn" class="set-button end-set">
+                        End Current Set
+                    </button>
+                    
+                    <div id="setFinishedControls" class="set-finished-controls">
+                        <button id="newSetBtn" class="set-button new-set">
+                            Start New Set
+                        </button>
+                        <button id="continueSetBtn" class="set-button continue">
+                            Continue Current Set
+                        </button>
+                    </div>
+                    
+                    <button id="endMatchBtn" class="set-button end-match">
+                        End Match
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -456,6 +566,14 @@
         const teamBName = document.getElementById('teamBName');
         const btnTeamA = document.getElementById('btnTeamA');
         const btnTeamB = document.getElementById('btnTeamB');
+        
+        // Set Management Elements
+        const setStatus = document.getElementById('setStatus');
+        const endSetBtn = document.getElementById('endSetBtn');
+        const setFinishedControls = document.getElementById('setFinishedControls');
+        const newSetBtn = document.getElementById('newSetBtn');
+        const continueSetBtn = document.getElementById('continueSetBtn');
+        const endMatchBtn = document.getElementById('endMatchBtn');
 
         /**
          * KORRIGIERTE VERBINDUNGSLOGIK
@@ -473,7 +591,7 @@
 
             try {
                 // Step 1: Session über API validieren
-                const response = await fetch(`https://pickleballstreamtv.com/api/session/${sessionId}/join`, { method: 'POST' });
+                const response = await fetch(`/api/session/${sessionId}/join`, { method: 'POST' });
 
                 if (!response.ok) {
                     throw new Error(response.status === 404 ? 'Session nicht gefunden.' : 'Serverfehler.');
@@ -488,7 +606,7 @@
                 currentSessionId = sessionId;
                 updateGameState(result.session);
 
-                // Step 2: **SOFORT UI umschalten** (Das war das fehlende Teil!)
+                // Step 2: **SOFORT UI umschalten** 
                 showMainApp();
                 showConnectionStatus('Verbunden!', 'success');
                 console.log('✅ UI umgeschaltet, Remote-Ansicht ist jetzt aktiv.');
@@ -499,7 +617,6 @@
             } catch (error) {
                 console.error('❌ Verbindungsfehler:', error);
                 showConnectionStatus(`Fehler: ${error.message}`, 'error');
-                // Bei Fehlern im Connection Screen bleiben
                 connectionScreen.classList.remove('hidden');
                 mainApp.classList.add('hidden');
             } finally {
@@ -527,6 +644,8 @@
                 if (message.type === 'score_update') {
                     console.log('📨 Score-Update via WebSocket erhalten:', message.data);
                     updateGameState(message.data);
+                } else if (message.type === 'set_ended' || message.type === 'new_set_started' || message.type === 'match_ended') {
+                    handleSetMessage(message);
                 }
             };
 
@@ -553,8 +672,115 @@
             }
         }
 
-        // UI HELPER FUNCTIONS
+        // SET MANAGEMENT FUNCTIONS
+        async function endCurrentSet() {
+            if (!currentSessionId) {
+                alert('Not connected to session');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/session/${currentSessionId}/end-set`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    setFinishedControls.classList.add('show');
+                    setStatus.textContent = `Set ended: ${result.set_result}`;
+                    vibrate([100, 50, 100, 50, 100]); // Extended haptic feedback
+                    console.log(`Set ended at score: ${result.set_result}`);
+                }
+            } catch (error) {
+                console.error('End set error:', error);
+                alert('Failed to end set');
+            }
+        }
 
+        async function startNewSet() {
+            if (!currentSessionId) {
+                alert('Not connected to session');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/session/${currentSessionId}/new-set`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    // UI zurücksetzen
+                    setFinishedControls.classList.remove('show');
+                    setStatus.textContent = 'Flexible scoring - end set at any score';
+                    
+                    // Score zurücksetzen
+                    updateScoreDisplay(0, 0);
+                    vibrate([200]); // Success vibration
+                    console.log('New set started!');
+                }
+            } catch (error) {
+                console.error('New set error:', error);
+                alert('Failed to start new set');
+            }
+        }
+
+        function continueCurrentSet() {
+            setFinishedControls.classList.remove('show');
+            setStatus.textContent = 'Flexible scoring - end set at any score';
+            vibrate([50]); // Light feedback
+            console.log('Continuing current set');
+        }
+
+        async function endMatch() {
+            if (!confirm('Are you sure you want to end the match?')) {
+                return;
+            }
+            
+            if (!currentSessionId) {
+                alert('Not connected to session');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/session/${currentSessionId}/end-match`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    alert('Match ended successfully!');
+                    vibrate([300, 100, 300]); // Match end vibration
+                    setFinishedControls.classList.remove('show');
+                    console.log('Match ended');
+                }
+            } catch (error) {
+                console.error('End match error:', error);
+                alert('Failed to end match');
+            }
+        }
+
+        function handleSetMessage(message) {
+            switch(message.type) {
+                case 'set_ended':
+                    setStatus.textContent = `Set ended: ${message.set_result}`;
+                    setFinishedControls.classList.add('show');
+                    break;
+                    
+                case 'new_set_started':
+                    updateScoreDisplay(message.score.team_a, message.score.team_b);
+                    setStatus.textContent = `Set ${message.current_set} started!`;
+                    setFinishedControls.classList.remove('show');
+                    break;
+                    
+                case 'match_ended':
+                    alert('Match ended!');
+                    setFinishedControls.classList.remove('show');
+                    break;
+            }
+        }
+
+        // UI HELPER FUNCTIONS
         function showConnectionStatus(message, type) {
             connectionStatus.textContent = message;
             connectionStatus.className = `connection-status ${type}`;
@@ -581,8 +807,7 @@
 
         function updateGameState(data) {
             if (!data) return;
-            scoreA.textContent = data.scoreA ?? 0;
-            scoreB.textContent = data.scoreB ?? 0;
+            updateScoreDisplay(data.scoreA ?? 0, data.scoreB ?? 0);
             teamAName.textContent = data.teamA ?? 'Team A';
             teamBName.textContent = data.teamB ?? 'Team B';
             btnTeamA.innerHTML = `${data.teamA ?? 'Team A'}<br>+1`;
@@ -591,24 +816,26 @@
             teamBName.classList.toggle('serving', data.server === 'B');
         }
 
-        async function vibrate() {
-    // Native Haptic Feedback für Mobile Apps
-    if (window.Capacitor && window.Capacitor.Plugins.Haptics) {
-        try {
-            await window.Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' });
-            console.log('Haptic feedback triggered');
-        } catch (e) {
-            console.log('Haptics failed:', e);
+        function updateScoreDisplay(scoreAVal, scoreBVal) {
+            scoreA.textContent = scoreAVal;
+            scoreB.textContent = scoreBVal;
         }
-    }
-    // Fallback für Browser
-    else if (navigator.vibrate) {
-        navigator.vibrate(50);
-        console.log('Browser vibration triggered');
-    } else {
-        console.log('No haptic feedback available');
-    }
-}
+
+        async function vibrate(pattern = 50) {
+            // Native Haptic Feedback für Mobile Apps
+            if (window.Capacitor) {
+                try {
+                    const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+                    await Haptics.impact({ style: ImpactStyle.Light });
+                } catch (e) {
+                    console.log('Haptics not available');
+                }
+            }
+            // Fallback für Browser
+            else if (navigator.vibrate) {
+                navigator.vibrate(pattern);
+            }
+        }
 
         // SCORE CONTROL FUNCTIONS
         function addPoint(team) {
@@ -627,21 +854,27 @@
             sendWebSocketMessage({ type: 'undo' });
         }
 
-        function newGame() {
-            if (confirm('Neues Spiel starten? Der Spielstand wird auf 0-0 zurückgesetzt.')) {
+        function resetScore() {
+            if (confirm('Reset score to 0-0?')) {
                 vibrate();
                 sendWebSocketMessage({ type: 'reset' });
             }
         }
 
-       // EVENT LISTENERS
+        // EVENT LISTENERS
         connectButton.addEventListener('click', connectToSession);
         sessionInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') connectToSession(); });
         btnTeamA.addEventListener('click', () => addPoint('A'));
         btnTeamB.addEventListener('click', () => addPoint('B'));
         document.getElementById('btnUndo').addEventListener('click', undo);
         document.getElementById('btnServe').addEventListener('click', switchServe);
-        document.getElementById('btnNewGame').addEventListener('click', newGame);
+        document.getElementById('btnReset').addEventListener('click', resetScore);
+
+        // Set Management Event Listeners
+        endSetBtn.addEventListener('click', endCurrentSet);
+        newSetBtn.addEventListener('click', startNewSet);
+        continueSetBtn.addEventListener('click', continueCurrentSet);
+        endMatchBtn.addEventListener('click', endMatch);
 
         // Auto-connect wenn Session in URL
         document.addEventListener('DOMContentLoaded', () => {
@@ -695,70 +928,6 @@
                     vibrate();
                 };
                 console.log('✅ Score buttons SAUBER repariert (Event-Listener-Konflikte behoben)');
-            }
-
-            // Switch Serve Button (bereits funktional, aber sicherheitshalber auch sauber)
-            const btnServe = document.getElementById('btnServe');
-            const teamAName = document.getElementById('teamAName');
-            const teamBName = document.getElementById('teamBName');
-            
-            if (btnServe && teamAName && teamBName) {
-                btnServe.replaceWith(btnServe.cloneNode(true));
-                const newBtnServe = document.getElementById('btnServe');
-                
-                newBtnServe.onclick = function() {
-                    console.log('Switch Serve clicked');
-                    const currentServer = teamAName.classList.contains('serving') ? 'A' : 'B';
-                    const newServer = currentServer === 'A' ? 'B' : 'A';
-                    
-                    teamAName.classList.toggle('serving', newServer === 'A');
-                    teamBName.classList.toggle('serving', newServer === 'B');
-                    
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({type: 'serve', server: newServer}));
-                    }
-                    vibrate();
-                };
-                console.log('✅ Switch Serve button sauber repariert');
-            }
-
-            // Undo Button (saubere Reparatur)
-            const btnUndo = document.getElementById('btnUndo');
-            
-            if (btnUndo && scoreA && scoreB) {
-                btnUndo.replaceWith(btnUndo.cloneNode(true));
-                const newBtnUndo = document.getElementById('btnUndo');
-                
-                newBtnUndo.onclick = function() {
-                    console.log('Undo button clicked');
-                    const currentScoreA = parseInt(scoreA.textContent) || 0;
-                    const currentScoreB = parseInt(scoreB.textContent) || 0;
-                    
-                    let undoTeam = null;
-                    if (currentScoreA > currentScoreB && currentScoreA > 0) {
-                        undoTeam = 'A';
-                    } else if (currentScoreB > 0) {
-                        undoTeam = 'B';
-                    }
-                    
-                    if (undoTeam) {
-                        if (undoTeam === 'A') {
-                            scoreA.textContent = Math.max(0, currentScoreA - 1);
-                        } else {
-                            scoreB.textContent = Math.max(0, currentScoreB - 1);
-                        }
-                        
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({type: 'score', team: undoTeam, action: 'subtract'}));
-                        }
-                        vibrate();
-                    } else {
-                        console.log('Nichts zum Rückgängigmachen (Score ist 0-0)');
-                        newBtnUndo.style.opacity = '0.5';
-                        setTimeout(() => { newBtnUndo.style.opacity = '1'; }, 200);
-                    }
-                };
-                console.log('✅ Undo button sauber repariert');
             }
 
             console.log('🎯 ALLE Button-Reparaturen SAUBER abgeschlossen! Event-Listener-Konflikte behoben.');
