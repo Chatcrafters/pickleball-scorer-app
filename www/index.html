@@ -578,115 +578,265 @@
         const endMatchBtn = document.getElementById('endMatchBtn');
 
         // MAIN CONNECTION FUNCTION
-async function connectToSession() {
-    const sessionId = sessionInput.value.trim().toUpperCase();
-    if (!sessionId || sessionId.length !== 6) {
-        showConnectionStatus('Bitte 6-stelligen Code eingeben.', 'error');
-        return;
-    }
+        async function connectToSession() {
+            const sessionId = sessionInput.value.trim().toUpperCase();
+            if (!sessionId || sessionId.length !== 6) {
+                showConnectionStatus('Bitte 6-stelligen Code eingeben.', 'error');
+                return;
+            }
 
-    showConnectionStatus('Validiere Session...', 'connecting');
-    connectButton.disabled = true;
+            showConnectionStatus('Validiere Session...', 'connecting');
+            connectButton.disabled = true;
 
-    try {
-        // Session über Capacitor HTTP Plugin validieren
-        const response = await Http.request({
-            url: `https://pickleballstreamtv.com/api/session/${sessionId}/join`,
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 10000  // 10 Sekunden Timeout
+            try {
+                // Session über Capacitor HTTP Plugin validieren
+                const response = await Http.request({
+                    url: `https://pickleballstreamtv.com/api/session/${sessionId}/join`,
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 10000
+                });
+
+                console.log("API Response", response);
+                console.log("API Response Data", response.data);
+
+                if (!response || !response.data) {
+                    throw new Error('Server hat keine gültige Antwort gesendet.');
+                }
+
+                const isSuccess = (
+                    response.data.success === true || 
+                    response.data.status === "success" ||
+                    response.status === 200
+                );
+
+                if (!isSuccess) {
+                    const errorMsg = response.data?.error || response.data?.message || 'Session ungültig.';
+                    throw new Error(errorMsg);
+                }
+
+                console.log('Session-Beitritt erfolgreich bestätigt.');
+                currentSessionId = sessionId;
+                
+                const sessionData = response.data.session || response.data || {};
+                updateGameState(sessionData);
+
+                showMainApp();
+                showConnectionStatus('Verbunden!', 'success');
+                connectWebSocket(sessionId);
+
+            } catch (error) {
+                console.error('Verbindungsfehler:', error);
+                
+                let errorMessage = 'Verbindungsfehler';
+                
+                if (error.message) {
+                    errorMessage = error.message;
+                } else if (error.response?.data?.error) {
+                    errorMessage = error.response.data.error;
+                } else if (error.code === 'NETWORK_ERROR') {
+                    errorMessage = 'Netzwerkfehler - prüfe Internetverbindung';
+                } else if (error.code === 'TIMEOUT') {
+                    errorMessage = 'Timeout - Server antwortet nicht';
+                }
+                
+                showConnectionStatus(`Fehler: ${errorMessage}`, 'error');
+                connectionScreen.classList.remove('hidden');
+                mainApp.classList.add('hidden');
+            } finally {
+                connectButton.disabled = false;
+            }
+        }
+
+        // WEBSOCKET CONNECTION
+        function connectWebSocket(sessionId) {
+            const wsUrl = `wss://pickleballstreamtv.com/ws/session/${sessionId}`;
+            
+            console.log(`WebSocket-Verbindung zu: ${wsUrl}`);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket-Verbindung hergestellt.');
+                updateConnectionStatus(true);
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === 'score_update') {
+                    updateGameState(message.data);
+                } else if (['set_ended', 'new_set_started', 'match_ended'].includes(message.type)) {
+                    handleSetMessage(message);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket-Fehler:', error);
+                updateConnectionStatus(false, 'WebSocket-Fehler');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket-Verbindung geschlossen.');
+                updateConnectionStatus(false, 'Getrennt');
+            };
+        }
+
+        // SET MANAGEMENT FUNCTIONS - Simplified versions
+        async function endCurrentSet() {
+            alert('Set management coming soon');
+        }
+
+        async function startNewSet() {
+            alert('Set management coming soon');
+        }
+
+        function continueCurrentSet() {
+            setFinishedControls.classList.remove('show');
+            setStatus.textContent = 'Flexible scoring - end set at any score';
+            vibrate([50]);
+            console.log('Continuing current set');
+        }
+
+        async function endMatch() {
+            alert('Set management coming soon');
+        }
+
+        function handleSetMessage(message) {
+            switch(message.type) {
+                case 'set_ended':
+                    setStatus.textContent = `Set ended: ${message.set_result}`;
+                    setFinishedControls.classList.add('show');
+                    break;
+                    
+                case 'new_set_started':
+                    updateScoreDisplay(message.score.team_a, message.score.team_b);
+                    setStatus.textContent = `Set ${message.current_set} started!`;
+                    setFinishedControls.classList.remove('show');
+                    break;
+                    
+                case 'match_ended':
+                    alert('Match ended!');
+                    setFinishedControls.classList.remove('show');
+                    break;
+            }
+        }
+
+        // UI HELPER FUNCTIONS
+        function showConnectionStatus(message, type) {
+            connectionStatus.textContent = message;
+            connectionStatus.className = `connection-status ${type}`;
+            connectionStatus.style.display = 'block';
+            if (type === 'success') {
+                setTimeout(() => { connectionStatus.style.display = 'none'; }, 2000);
+            }
+        }
+
+        function showMainApp() {
+            connectionScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+        }
+
+        function updateConnectionStatus(isConnected, text = 'Live verbunden') {
+            if (isConnected) {
+                statusDot.classList.remove('disconnected');
+                connectionText.textContent = text;
+            } else {
+                statusDot.classList.add('disconnected');
+                connectionText.textContent = text;
+            }
+        }
+
+        function updateGameState(data) {
+            if (!data) return;
+            updateScoreDisplay(data.scoreA ?? data.team_a ?? 0, data.scoreB ?? data.team_b ?? 0);
+            teamAName.textContent = data.teamA ?? data.team_a_name ?? 'Team A';
+            teamBName.textContent = data.teamB ?? data.team_b_name ?? 'Team B';
+            btnTeamA.innerHTML = `${data.teamA ?? data.team_a_name ?? 'Team A'}<br>+1`;
+            btnTeamB.innerHTML = `${data.teamB ?? data.team_b_name ?? 'Team B'}<br>+1`;
+            teamAName.classList.toggle('serving', data.server === 'A');
+            teamBName.classList.toggle('serving', data.server === 'B');
+        }
+
+        function updateScoreDisplay(scoreAVal, scoreBVal) {
+            scoreA.textContent = scoreAVal;
+            scoreB.textContent = scoreBVal;
+        }
+
+        async function vibrate(pattern = 50) {
+            if (window.Capacitor) {
+                try {
+                    const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+                    await Haptics.impact({ style: ImpactStyle.Light });
+                } catch (e) {
+                    console.log('Haptics not available');
+                }
+            } else if (navigator.vibrate) {
+                navigator.vibrate(pattern);
+            }
+        }
+
+        function sendWebSocketMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            } else {
+                console.warn('WebSocket nicht verbunden.');
+                alert('Verbindung zum Server verloren. Bitte Seite neu laden.');
+            }
+        }
+
+        // SCORE CONTROL FUNCTIONS
+        function addPoint(team) {
+            vibrate();
+            sendWebSocketMessage({ type: 'score', team: team, action: 'add' });
+        }
+
+        function switchServe() {
+            vibrate();
+            const currentServer = teamAName.classList.contains('serving') ? 'A' : 'B';
+            sendWebSocketMessage({ type: 'serve', server: currentServer === 'A' ? 'B' : 'A' });
+        }
+
+        function undo() {
+            vibrate();
+            sendWebSocketMessage({ type: 'undo' });
+        }
+
+        function resetScore() {
+            if (confirm('Reset score to 0-0?')) {
+                vibrate();
+                sendWebSocketMessage({ type: 'reset' });
+            }
+        }
+
+        // EVENT LISTENERS
+        connectButton.addEventListener('click', connectToSession);
+        sessionInput.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') connectToSession(); 
         });
 
-        // Debug: volle API‑Antwort im Log anzeigen
-        console.log("API Response", response);
-        console.log("API Response Data", response.data);
+        // Score buttons
+        btnTeamA.addEventListener('click', () => addPoint('A'));
+        btnTeamB.addEventListener('click', () => addPoint('B'));
 
-        // Fallback: Wenn response.data leer/undefined ist
-        if (!response || !response.data) {
-            throw new Error('Server hat keine gültige Antwort gesendet.');
-        }
+        // Control buttons
+        document.getElementById('btnUndo').addEventListener('click', undo);
+        document.getElementById('btnServe').addEventListener('click', switchServe);
+        document.getElementById('btnReset').addEventListener('click', resetScore);
 
-        // Backend liefert entweder 'success: true' oder 'status: success'
-        const isSuccess = (
-            response.data.success === true || 
-            response.data.status === "success" ||
-            response.status === 200  // Fallback: HTTP 200 = OK
-        );
+        // Set Management buttons
+        endSetBtn.addEventListener('click', endCurrentSet);
+        newSetBtn.addEventListener('click', startNewSet);
+        continueSetBtn.addEventListener('click', continueCurrentSet);
+        endMatchBtn.addEventListener('click', endMatch);
 
-        if (!isSuccess) {
-            const errorMsg = response.data?.error || response.data?.message || 'Session ungültig.';
-            throw new Error(errorMsg);
-        }
-
-        console.log('Session-Beitritt erfolgreich bestätigt.');
-        currentSessionId = sessionId;
-        
-        // Fallback für Session-Daten
-        const sessionData = response.data.session || response.data || {};
-        updateGameState(sessionData);
-
-        // UI umschalten
-        showMainApp();
-        showConnectionStatus('Verbunden!', 'success');
-
-        // WebSocket im Hintergrund verbinden
-        connectWebSocket(sessionId);
-
-    } catch (error) {
-        console.error('Verbindungsfehler:', error);
-        
-        // Detaillierte Fehlerbehandlung
-        let errorMessage = 'Verbindungsfehler';
-        
-        if (error.message) {
-            errorMessage = error.message;
-        } else if (error.response?.data?.error) {
-            errorMessage = error.response.data.error;
-        } else if (error.code === 'NETWORK_ERROR') {
-            errorMessage = 'Netzwerkfehler - prüfe Internetverbindung';
-        } else if (error.code === 'TIMEOUT') {
-            errorMessage = 'Timeout - Server antwortet nicht';
-        }
-        
-        showConnectionStatus(`Fehler: ${errorMessage}`, 'error');
-        connectionScreen.classList.remove('hidden');
-        mainApp.classList.add('hidden');
-    } finally {
-        connectButton.disabled = false;
-    }
-}
-
-// WEBSOCKET CONNECTION
-function connectWebSocket(sessionId) {
-    // Force wss for Capacitor
-    const wsUrl = `wss://pickleballstreamtv.com/ws/session/${sessionId}`;
-    
-    console.log(`WebSocket-Verbindung zu: ${wsUrl}`);
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-        console.log('WebSocket-Verbindung hergestellt.');
-        updateConnectionStatus(true);
-    };
-
-    ws.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        if (message.type === 'score_update') {
-            updateGameState(message.data);
-        } else if (['set_ended', 'new_set_started', 'match_ended'].includes(message.type)) {
-            handleSetMessage(message);
-        }
-    };
-
-    ws.onerror = (error) => {
-        console.error('WebSocket-Fehler:', error);
-        updateConnectionStatus(false, 'WebSocket-Fehler');
-    };
-
-    ws.onclose = () => {
-        console.log('WebSocket-Verbindung geschlossen.');
-        updateConnectionStatus(false, 'Getrennt');
-    };
-}
-
-// SET MANAGEMENT FUNCTIONS (using Http plugin)
+        // Auto-connect bei URL Parameter
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionFromUrl = urlParams.get('session');
+            if (sessionFromUrl) {
+                sessionInput.value = sessionFromUrl.slice(-6).toUpperCase();
+                connectToSession();
+            }
+        });
+    </script>
+</body>
+</html>
