@@ -629,7 +629,7 @@
          */
         function connectWebSocket(sessionId) {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws/session/${sessionId}`;
+            const wsUrl = `${wsProtocol}//${"pickleballstreamtv.com"}/ws/session/${sessionId}`;
             
             console.log(`🔌 Versuche WebSocket-Verbindung zu: ${wsUrl}`);
             ws = new WebSocket(wsUrl);
