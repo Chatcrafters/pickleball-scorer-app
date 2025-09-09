@@ -622,8 +622,8 @@
 
         // WEBSOCKET CONNECTION
         function connectWebSocket(sessionId) {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//pickleballstreamtv.com/ws/session/${sessionId}`;
+            // Force wss for Capacitor
+            const wsUrl = `wss://pickleballstreamtv.com/ws/session/${sessionId}`;
             
             console.log(`WebSocket-Verbindung zu: ${wsUrl}`);
             ws = new WebSocket(wsUrl);
