@@ -518,7 +518,7 @@
                 </button>
             </div>
 
-            <!-- SET MANAGEMENT SECTION -->
+            <!-- NEW: SET MANAGEMENT SECTION -->
             <div class="set-management">
                 <div class="set-header">
                     <div class="set-title">Set Management</div>
@@ -548,8 +548,7 @@
     </div>
 
     <script type="module">
-        import { Http } from '@capacitor-community/http';
-
+import { Http } from "@capacitor-community/http";
         // Global Variables
         let ws = null;
         let currentSessionId = null;
@@ -577,8 +576,41 @@
         const continueSetBtn = document.getElementById('continueSetBtn');
         const endMatchBtn = document.getElementById('endMatchBtn');
 
-        // MAIN CONNECTION FUNCTION
-        async function connectToSession() {
+        /**
+         * KORRIGIERTE VERBINDUNGSLOGIK
+         * UI wird SOFORT nach erfolgreichem API-Call aktualisiert
+         */
+        try {
+    // Step 1: Session über API validieren
+    const response = await Http.request({
+    url: `https://pickleballstreamtv.com/api/session/${sessionId}/join`,
+    method: "POST"
+});
+    
+    console.log('Response status:', response.status);
+    console.log('Response headers:', response.headers);
+    
+    const responseText = await response.text();
+    console.log('Raw response text:', responseText);
+    
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${responseText}`);
+    }
+    
+    let result;
+    try {
+        result = JSON.parse(responseText);
+    } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        console.error('Response was:', responseText.substring(0, 200) + '...');
+        throw new Error(`Invalid JSON response: ${jsonError.message}`);
+    }
+    
+    if (!result.success) {
+        throw new Error(result.error || 'Session ungültig.');
+    }
+    
+    // Rest der Funktion...
             const sessionId = sessionInput.value.trim().toUpperCase();
             if (!sessionId || sessionId.length !== 6) {
                 showConnectionStatus('Bitte 6-stelligen Code eingeben.', 'error');
@@ -589,29 +621,35 @@
             connectButton.disabled = true;
 
             try {
-                // Session über Capacitor HTTP Plugin validieren
+                // Step 1: Session über API validieren
                 const response = await Http.request({
-                    url: `https://pickleballstreamtv.com/api/session/${sessionId}/join`,
-                    method: 'POST'
-                });
+    url: `https://pickleballstreamtv.com/api/session/${sessionId}/join`,
+    method: 'POST'
+});
 
-                if (!response.data || !response.data.success) {
-                    throw new Error(response.data?.error || 'Session ungültig.');
+                if (!response.ok) {
+                    throw new Error(response.status === 404 ? 'Session nicht gefunden.' : 'Serverfehler.');
+                }
+
+                const result = response.data;
+                if (!result.success) {
+                    throw new Error(result.error || 'Session ungültig.');
                 }
                 
-                console.log('Session-Beitritt erfolgreich bestätigt.');
+                console.log('✅ Session-Beitritt über API erfolgreich bestätigt.');
                 currentSessionId = sessionId;
-                updateGameState(response.data.session);
+                updateGameState(result.session);
 
-                // UI umschalten
+                // Step 2: **SOFORT UI umschalten** 
                 showMainApp();
                 showConnectionStatus('Verbunden!', 'success');
+                console.log('✅ UI umgeschaltet, Remote-Ansicht ist jetzt aktiv.');
 
-                // WebSocket im Hintergrund verbinden
+                // Step 3: WebSocket im Hintergrund verbinden
                 connectWebSocket(sessionId);
 
             } catch (error) {
-                console.error('Verbindungsfehler:', error);
+                console.error('❌ Verbindungsfehler:', error);
                 showConnectionStatus(`Fehler: ${error.message}`, 'error');
                 connectionScreen.classList.remove('hidden');
                 mainApp.classList.add('hidden');
@@ -620,40 +658,55 @@
             }
         }
 
-        // WEBSOCKET CONNECTION
+        /**
+         * WebSocket für Echtzeit-Updates verbinden
+         */
         function connectWebSocket(sessionId) {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${wsProtocol}//pickleballstreamtv.com/ws/session/${sessionId}`;
             
-            console.log(`WebSocket-Verbindung zu: ${wsUrl}`);
+            console.log(`🔌 Versuche WebSocket-Verbindung zu: ${wsUrl}`);
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                console.log('WebSocket-Verbindung hergestellt.');
+                console.log('✅ WebSocket-Verbindung hergestellt.');
                 updateConnectionStatus(true);
             };
 
             ws.onmessage = (event) => {
                 const message = JSON.parse(event.data);
                 if (message.type === 'score_update') {
+                    console.log('📨 Score-Update via WebSocket erhalten:', message.data);
                     updateGameState(message.data);
-                } else if (['set_ended', 'new_set_started', 'match_ended'].includes(message.type)) {
+                } else if (message.type === 'set_ended' || message.type === 'new_set_started' || message.type === 'match_ended') {
                     handleSetMessage(message);
                 }
             };
 
             ws.onerror = (error) => {
-                console.error('WebSocket-Fehler:', error);
+                console.error('❌ WebSocket-Fehler:', error);
                 updateConnectionStatus(false, 'WebSocket-Fehler');
             };
 
             ws.onclose = () => {
-                console.log('WebSocket-Verbindung geschlossen.');
+                console.log('❌ WebSocket-Verbindung geschlossen.');
                 updateConnectionStatus(false, 'Getrennt');
             };
         }
 
-        // SET MANAGEMENT FUNCTIONS (using Http plugin)
+        /**
+         * Nachricht an Server senden
+         */
+        function sendWebSocketMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            } else {
+                console.warn('WebSocket nicht verbunden. Senden der Nachricht fehlgeschlagen.');
+                alert('Verbindung zum Server verloren. Bitte Seite neu laden.');
+            }
+        }
+
+        // SET MANAGEMENT FUNCTIONS
         async function endCurrentSet() {
             if (!currentSessionId) {
                 alert('Not connected to session');
@@ -661,16 +714,16 @@
             }
             
             try {
-                const response = await Http.request({
-                    url: `https://pickleballstreamtv.com/api/session/${currentSessionId}/end-set`,
+                const response = await fetch(`/api/session/${currentSessionId}/end-set`, {
                     method: 'POST'
                 });
                 
-                if (response.data && response.data.status === 'success') {
+                const result = response.data;
+                if (result.status === 'success') {
                     setFinishedControls.classList.add('show');
-                    setStatus.textContent = `Set ended: ${response.data.set_result}`;
-                    vibrate([100, 50, 100, 50, 100]);
-                    console.log(`Set ended at score: ${response.data.set_result}`);
+                    setStatus.textContent = `Set ended: ${result.set_result}`;
+                    vibrate([100, 50, 100, 50, 100]); // Extended haptic feedback
+                    console.log(`Set ended at score: ${result.set_result}`);
                 }
             } catch (error) {
                 console.error('End set error:', error);
@@ -685,16 +738,19 @@
             }
             
             try {
-                const response = await Http.request({
-                    url: `https://pickleballstreamtv.com/api/session/${currentSessionId}/new-set`,
+                const response = await fetch(`/api/session/${currentSessionId}/new-set`, {
                     method: 'POST'
                 });
                 
-                if (response.data && response.data.status === 'success') {
+                const result = response.data;
+                if (result.status === 'success') {
+                    // UI zurücksetzen
                     setFinishedControls.classList.remove('show');
                     setStatus.textContent = 'Flexible scoring - end set at any score';
+                    
+                    // Score zurücksetzen
                     updateScoreDisplay(0, 0);
-                    vibrate([200]);
+                    vibrate([200]); // Success vibration
                     console.log('New set started!');
                 }
             } catch (error) {
@@ -706,7 +762,7 @@
         function continueCurrentSet() {
             setFinishedControls.classList.remove('show');
             setStatus.textContent = 'Flexible scoring - end set at any score';
-            vibrate([50]);
+            vibrate([50]); // Light feedback
             console.log('Continuing current set');
         }
 
@@ -721,14 +777,14 @@
             }
             
             try {
-                const response = await Http.request({
-                    url: `https://pickleballstreamtv.com/api/session/${currentSessionId}/end-match`,
+                const response = await fetch(`/api/session/${currentSessionId}/end-match`, {
                     method: 'POST'
                 });
                 
-                if (response.data && response.data.status === 'success') {
+                const result = response.data;
+                if (result.status === 'success') {
                     alert('Match ended successfully!');
-                    vibrate([300, 100, 300]);
+                    vibrate([300, 100, 300]); // Match end vibration
                     setFinishedControls.classList.remove('show');
                     console.log('Match ended');
                 }
@@ -800,6 +856,7 @@
         }
 
         async function vibrate(pattern = 50) {
+            // Native Haptic Feedback für Mobile Apps
             if (window.Capacitor) {
                 try {
                     const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
@@ -807,17 +864,10 @@
                 } catch (e) {
                     console.log('Haptics not available');
                 }
-            } else if (navigator.vibrate) {
-                navigator.vibrate(pattern);
             }
-        }
-
-        function sendWebSocketMessage(message) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify(message));
-            } else {
-                console.warn('WebSocket nicht verbunden.');
-                alert('Verbindung zum Server verloren. Bitte Seite neu laden.');
+            // Fallback für Browser
+            else if (navigator.vibrate) {
+                navigator.vibrate(pattern);
             }
         }
 
@@ -847,26 +897,20 @@
 
         // EVENT LISTENERS
         connectButton.addEventListener('click', connectToSession);
-        sessionInput.addEventListener('keypress', (e) => { 
-            if (e.key === 'Enter') connectToSession(); 
-        });
-
-        // Score buttons
+        sessionInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') connectToSession(); });
         btnTeamA.addEventListener('click', () => addPoint('A'));
         btnTeamB.addEventListener('click', () => addPoint('B'));
-
-        // Control buttons
         document.getElementById('btnUndo').addEventListener('click', undo);
         document.getElementById('btnServe').addEventListener('click', switchServe);
         document.getElementById('btnReset').addEventListener('click', resetScore);
 
-        // Set Management buttons
+        // Set Management Event Listeners
         endSetBtn.addEventListener('click', endCurrentSet);
         newSetBtn.addEventListener('click', startNewSet);
         continueSetBtn.addEventListener('click', continueCurrentSet);
         endMatchBtn.addEventListener('click', endMatch);
 
-        // Auto-connect bei URL Parameter
+        // Auto-connect wenn Session in URL
         document.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const sessionFromUrl = urlParams.get('session');
@@ -875,6 +919,53 @@
                 connectToSession();
             }
         });
+
+        // SAUBERE BUTTON-REPARATUR: Alle alten Event-Listener entfernen, neue onclick-Handler setzen
+        setTimeout(() => {
+            console.log('🔧 Starte saubere Button-Reparatur...');
+            
+            // Score Buttons mit kompletter Neuinitialisierung
+            const btnTeamA = document.getElementById('btnTeamA');
+            const btnTeamB = document.getElementById('btnTeamB');
+            const scoreA = document.getElementById('scoreA');
+            const scoreB = document.getElementById('scoreB');
+            
+            if (btnTeamA && btnTeamB && scoreA && scoreB) {
+                // KRITISCH: Alle alten Event-Listener entfernen
+                btnTeamA.replaceWith(btnTeamA.cloneNode(true));
+                btnTeamB.replaceWith(btnTeamB.cloneNode(true));
+                
+                // Neue Referenzen holen (nach dem cloneNode)
+                const newBtnTeamA = document.getElementById('btnTeamA');
+                const newBtnTeamB = document.getElementById('btnTeamB');
+                
+                // Neue onclick-Handler setzen (keine Konflikte mehr)
+                newBtnTeamA.onclick = function() {
+                    console.log('Team A scored!');
+                    const currentScore = parseInt(scoreA.textContent) || 0;
+                    scoreA.textContent = currentScore + 1;
+                    
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({type: 'score', team: 'A', action: 'add'}));
+                    }
+                    vibrate();
+                };
+                
+                newBtnTeamB.onclick = function() {
+                    console.log('Team B scored!');
+                    const currentScore = parseInt(scoreB.textContent) || 0;
+                    scoreB.textContent = currentScore + 1;
+                    
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({type: 'score', team: 'B', action: 'add'}));
+                    }
+                    vibrate();
+                };
+                console.log('✅ Score buttons SAUBER repariert (Event-Listener-Konflikte behoben)');
+            }
+
+            console.log('🎯 ALLE Button-Reparaturen SAUBER abgeschlossen! Event-Listener-Konflikte behoben.');
+        }, 2000);
     </script>
 </body>
 </html>
