@@ -1,15 +1,5 @@
 {
   "appId": "com.pickleballtv.remote",
   "appName": "Pickleball Remote",
-  "webDir": "www",
-  "server": {
-    "url": "https://pickleballstreamtv.com",
-    "cleartext": false,
-    "allowNavigation": ["pickleballstreamtv.com"]
-  },
-  "plugins": {
-    "CapacitorHttp": {
-      "enabled": true
-    }
-  }
+  "webDir": "www"
 }
