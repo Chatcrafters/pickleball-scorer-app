@@ -593,17 +593,20 @@
 
         async function vibrate() {
     // Native Haptic Feedback für Mobile Apps
-    if (window.Capacitor) {
+    if (window.Capacitor && window.Capacitor.Plugins.Haptics) {
         try {
-            const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
-            await Haptics.impact({ style: ImpactStyle.Light });
+            await window.Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' });
+            console.log('Haptic feedback triggered');
         } catch (e) {
-            console.log('Haptics not available');
+            console.log('Haptics failed:', e);
         }
     }
     // Fallback für Browser
     else if (navigator.vibrate) {
         navigator.vibrate(50);
+        console.log('Browser vibration triggered');
+    } else {
+        console.log('No haptic feedback available');
     }
 }
 
