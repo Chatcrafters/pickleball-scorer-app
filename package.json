@@ -2,6 +2,7 @@
   "name": "pickleball-remote",
   "version": "1.0.0",
   "dependencies": {
+    "@capacitor/android": "^7.4.3",
     "@capacitor/cli": "latest",
     "@capacitor/core": "latest",
     "@capacitor/haptics": "^7.0.2"
