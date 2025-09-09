@@ -579,7 +579,34 @@
          * KORRIGIERTE VERBINDUNGSLOGIK
          * UI wird SOFORT nach erfolgreichem API-Call aktualisiert
          */
-        async function connectToSession() {
+        try {
+    // Step 1: Session über API validieren
+    const response = await fetch(`https://pickleballstreamtv.com/api/session/${sessionId}/join`, { method: 'POST' });
+    
+    console.log('Response status:', response.status);
+    console.log('Response headers:', response.headers);
+    
+    const responseText = await response.text();
+    console.log('Raw response text:', responseText);
+    
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${responseText}`);
+    }
+    
+    let result;
+    try {
+        result = JSON.parse(responseText);
+    } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        console.error('Response was:', responseText.substring(0, 200) + '...');
+        throw new Error(`Invalid JSON response: ${jsonError.message}`);
+    }
+    
+    if (!result.success) {
+        throw new Error(result.error || 'Session ungültig.');
+    }
+    
+    // Rest der Funktion...
             const sessionId = sessionInput.value.trim().toUpperCase();
             if (!sessionId || sessionId.length !== 6) {
                 showConnectionStatus('Bitte 6-stelligen Code eingeben.', 'error');
@@ -629,7 +656,7 @@
          */
         function connectWebSocket(sessionId) {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${"pickleballstreamtv.com"}/ws/session/${sessionId}`;
+            const wsUrl = `${wsProtocol}//pickleballstreamtv.com/ws/session/${sessionId}`;
             
             console.log(`🔌 Versuche WebSocket-Verbindung zu: ${wsUrl}`);
             ws = new WebSocket(wsUrl);
