@@ -299,8 +299,9 @@
 
         .secondary-controls {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 10px;
+            margin-bottom: 20px;
         }
 
         .control-button {
@@ -335,6 +336,19 @@
             color: #ff4444;
         }
 
+        .control-button.newset {
+            border-color: #00bfff;
+            color: #00bfff;
+        }
+
+        /* Set Management Section */
+        .set-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
         /* Responsive Design */
         @media (max-width: 480px) {
             .container {
@@ -351,6 +365,14 @@
             
             .score {
                 font-size: 40px;
+            }
+
+            .secondary-controls {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .set-controls {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -430,8 +452,14 @@
                 <button id="btnUndo" class="control-button undo">
                     Undo<br>Last
                 </button>
-                <button id="btnNewGame" class="control-button reset">
-                    New<br>Game
+            </div>
+
+            <div class="set-controls">
+                <button id="btnNextSet" class="control-button newset">
+                    Next<br>Set
+                </button>
+                <button id="btnEndGame" class="control-button reset">
+                    End<br>Game
                 </button>
             </div>
         </div>
@@ -472,10 +500,10 @@
             connectButton.disabled = true;
 
             try {
-    // Step 1: Session über API validieren
-    const response = await fetch(`http://91.99.146.195:8001/api/session/${sessionId}/join`, { method: 'POST' });
+                // Step 1: Session über API validieren
+                const response = await fetch(`http://91.99.146.195:8001/api/session/${sessionId}/join`, { method: 'POST' });
 
-    if (!response.ok) {
+                if (!response.ok) {
                     throw new Error(response.status === 404 ? 'Session nicht gefunden.' : 'Serverfehler.');
                 }
 
@@ -592,23 +620,23 @@
         }
 
         async function vibrate() {
-    // Native Haptic Feedback für Mobile Apps
-    if (window.Capacitor && window.Capacitor.Plugins.Haptics) {
-        try {
-            await window.Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' });
-            console.log('Haptic feedback triggered');
-        } catch (e) {
-            console.log('Haptics failed:', e);
+            // Native Haptic Feedback für Mobile Apps
+            if (window.Capacitor && window.Capacitor.Plugins.Haptics) {
+                try {
+                    await window.Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' });
+                    console.log('Haptic feedback triggered');
+                } catch (e) {
+                    console.log('Haptics failed:', e);
+                }
+            }
+            // Fallback für Browser
+            else if (navigator.vibrate) {
+                navigator.vibrate(50);
+                console.log('Browser vibration triggered');
+            } else {
+                console.log('No haptic feedback available');
+            }
         }
-    }
-    // Fallback für Browser
-    else if (navigator.vibrate) {
-        navigator.vibrate(50);
-        console.log('Browser vibration triggered');
-    } else {
-        console.log('No haptic feedback available');
-    }
-}
 
         // SCORE CONTROL FUNCTIONS
         function addPoint(team) {
@@ -627,21 +655,41 @@
             sendWebSocketMessage({ type: 'undo' });
         }
 
-        function newGame() {
-            if (confirm('Neues Spiel starten? Der Spielstand wird auf 0-0 zurückgesetzt.')) {
+        // NEW SET MANAGEMENT FUNCTIONS
+        function nextSet() {
+            if (confirm('Neuen Satz starten? Der Spielstand wird auf 0-0 zurückgesetzt.')) {
                 vibrate();
-                sendWebSocketMessage({ type: 'reset' });
+                sendWebSocketMessage({ type: 'new_set' });
+                // Reset local UI immediately
+                scoreA.textContent = 0;
+                scoreB.textContent = 0;
+                setTimeout(() => alert('Neuer Satz gestartet!'), 200);
             }
         }
 
-       // EVENT LISTENERS
+        function endGame() {
+            if (confirm('Match wirklich beenden? Das Spiel wird komplett abgeschlossen.')) {
+                vibrate();
+                sendWebSocketMessage({ type: 'end_match' });
+                alert('Match beendet!');
+                // Optional: Return to connection screen
+                setTimeout(() => {
+                    connectionScreen.classList.remove('hidden');
+                    mainApp.classList.add('hidden');
+                    sessionInput.value = '';
+                }, 1000);
+            }
+        }
+
+        // EVENT LISTENERS
         connectButton.addEventListener('click', connectToSession);
         sessionInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') connectToSession(); });
         btnTeamA.addEventListener('click', () => addPoint('A'));
         btnTeamB.addEventListener('click', () => addPoint('B'));
         document.getElementById('btnUndo').addEventListener('click', undo);
         document.getElementById('btnServe').addEventListener('click', switchServe);
-        document.getElementById('btnNewGame').addEventListener('click', newGame);
+        document.getElementById('btnNextSet').addEventListener('click', nextSet);
+        document.getElementById('btnEndGame').addEventListener('click', endGame);
 
         // Auto-connect wenn Session in URL
         document.addEventListener('DOMContentLoaded', () => {
@@ -759,6 +807,56 @@
                     }
                 };
                 console.log('✅ Undo button sauber repariert');
+            }
+
+            // Next Set Button (neue Funktion)
+            const btnNextSet = document.getElementById('btnNextSet');
+            
+            if (btnNextSet) {
+                btnNextSet.replaceWith(btnNextSet.cloneNode(true));
+                const newBtnNextSet = document.getElementById('btnNextSet');
+                
+                newBtnNextSet.onclick = function() {
+                    console.log('Next Set button clicked');
+                    if (confirm('Neuen Satz starten? Der Spielstand wird auf 0-0 zurückgesetzt.')) {
+                        scoreA.textContent = 0;
+                        scoreB.textContent = 0;
+                        
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({type: 'new_set'}));
+                        }
+                        vibrate();
+                        setTimeout(() => alert('Neuer Satz gestartet!'), 200);
+                    }
+                };
+                console.log('✅ Next Set button sauber repariert');
+            }
+
+            // End Game Button (neue Funktion)
+            const btnEndGame = document.getElementById('btnEndGame');
+            
+            if (btnEndGame) {
+                btnEndGame.replaceWith(btnEndGame.cloneNode(true));
+                const newBtnEndGame = document.getElementById('btnEndGame');
+                
+                newBtnEndGame.onclick = function() {
+                    console.log('End Game button clicked');
+                    if (confirm('Match wirklich beenden? Das Spiel wird komplett abgeschlossen.')) {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({type: 'end_match'}));
+                        }
+                        vibrate();
+                        alert('Match beendet!');
+                        
+                        // Return to connection screen after delay
+                        setTimeout(() => {
+                            connectionScreen.classList.remove('hidden');
+                            mainApp.classList.add('hidden');
+                            sessionInput.value = '';
+                        }, 1000);
+                    }
+                };
+                console.log('✅ End Game button sauber repariert');
             }
 
             console.log('🎯 ALLE Button-Reparaturen SAUBER abgeschlossen! Event-Listener-Konflikte behoben.');
