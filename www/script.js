@@ -1,7 +1,7 @@
 class PickleballRemoteApp {
     constructor() {
         // Korrekte Server-URL für Set-Management Backend
-        this.API_BASE_URL = 'http://91.99.146.195:8001';
+        this.API_BASE_URL = 'http://91.99.146.195:8000';
         this.sessionId = null;
         this.currentGameState = null;
         this.init();
@@ -76,7 +76,7 @@ class PickleballRemoteApp {
     connectWebSocket() {
         if (!this.sessionId) return;
 
-        const wsUrl = `ws://91.99.146.195:8001/ws/session/${this.sessionId}`;
+        const wsUrl = `ws://91.99.146.195:8000/ws/session/${this.sessionId}`;
         console.log('Connecting to WebSocket:', wsUrl);
 
         this.ws = new WebSocket(wsUrl);
